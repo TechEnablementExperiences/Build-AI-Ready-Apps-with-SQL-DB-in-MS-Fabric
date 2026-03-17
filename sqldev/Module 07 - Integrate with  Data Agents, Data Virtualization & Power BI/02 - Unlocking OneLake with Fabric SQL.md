@@ -115,7 +115,7 @@ CREATE EXTERNAL TABLE SalesLT.ext_customer (
     CustomerID      INT,
     NameStyle       INT,
     Title           VARCHAR(10),
-    FirstnName      VARCHAR(100),
+    FirstName      VARCHAR(100),
     MiddleName      NVARCHAR(100),
     LastName        VARCHAR(100),
     Suffix          VARCHAR(10),
@@ -145,7 +145,7 @@ CREATE EXTERNAL TABLE SalesLT.ext_salesorder (
     ModifiedDate NVARCHAR (1000)
 )
   WITH (
-    LOCATION = '/SaleOrder.parquet',  -- File path relative to data source
+    LOCATION = '/SalesOrder.parquet',  -- File path relative to data source
     DATA_SOURCE = Cold_Lake,
     FILE_FORMAT = ParquetFF
 );
