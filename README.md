@@ -124,7 +124,7 @@ In this module, you will learn how to create a chatbot using Visual Studio code 
 In this module, you will learn about three integration patterns: governed Data Agent Q&A, OneLake data virtualization via OPENROWSET/external tables, and Copilot-assisted Power BI reporting.
 
 
-### 8. [Reporting with action using Translytical Taskflows in Power BI](sqldev/Module 08 - Reporting with action using Translytical Taskflows in Power BI/01 - Data population.md)
+### 8. [Reporting with action using Translytical Taskflows in Power BI](sqldev/Module%2008%20-%20Reporting%20with%20action%20using%20Translytical%20Taskflows%20in%20Power%20BI/01%20-%20Data%20population.md)
 
 In this exercise you will build on the examples from the previous exercise to **score for sentiment** user reviews of products for AdventureWorks.  You will then use Translytical Taskflows to create a **user data function**,**embed it within a Power BI report**, and **respond to the reviews** in order to determine if any actions or follow up is needed by you, the AdventureWorks employee, who owns the product.
 
