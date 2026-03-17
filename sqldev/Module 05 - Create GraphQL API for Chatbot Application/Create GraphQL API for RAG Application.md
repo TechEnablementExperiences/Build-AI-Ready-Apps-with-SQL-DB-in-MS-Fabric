@@ -1,0 +1,230 @@
+![](https://raw.githubusercontent.com/microsoft/sqlworkshops/master/graphics/microsoftlogo.png)
+
+# Build a GraphQL API for RAG applications
+
+In this section of the lab, you will be deploying a GraphQL API that uses embeddings, vector similarity search, and relational data to return a set of products that could be used by a chat application leveraging a Large Language Model (LLM).
+
+In this section, we will create a stored procedure that will be used by the GraphQL API for taking in questions and returning products.
+
+## Section 1:RAG pattern implementation with Stored Procedures
+
+### Task 1.1: Invoke external endpoint capability of SQL to call Open AI model 
+ 
+Let's create a new stored procedure to create a new flow that not only uses vector similarity search to get products based on a question asked by a user, but to take the results, pass them to Azure OpenAI Chat Completion, and craft an answer they would typically see with an AI chat application.
+
+The first step in augmenting our RAG application API is to create a stored procedure that takes the retrieved products and passes them in a prompt to an Azure OpenAI Chat Completion REST endpoint. The prompt consists of telling the endpoint who they are, what products they have to work with, and the exact question that was asked by the user. 
+
+   Copy/Paste the below T-SQL Code in a new query window and Run the code:
+
+> [!IMPORTANT]
+>
+> **Replace ``<your-api-endpoint>`` with your Open AI enpoint**
+
+
+```SQL
+ CREATE OR ALTER PROCEDURE [SalesLT].[prompt_answer]
+ @user_question nvarchar(max),
+ @products nvarchar(max),
+ @answer nvarchar(max) output
+
+ AS
+
+ DECLARE @url nvarchar(4000) = '<your-api-endpoint>/openai/deployments/gpt-4.1/chat/completions?api-version=2025-01-01-preview';
+ DECLARE @payload nvarchar(max) = N'{
+     "messages": [
+         {
+             "role": "system",
+             "content": "You are a sales assistant who helps customers find the right products for their question and activities."
+         },
+         {
+             "role": "user",
+             "content": "The products available are the following: ' + @products + '"
+         },
+         {
+             "role": "user",
+             "content": " ' + @user_question + '"
+         }
+     ]
+ }';
+
+ DECLARE @ret int, @response nvarchar(max);
+
+ exec @ret = sp_invoke_external_rest_endpoint
+     @url = @url,
+     @method = 'POST', 
+     @payload = @payload,
+     @credential = [<your-api-endpoint>],    
+     @timeout = 230,
+     @response = @response output;
+
+ select json_value(@response, '$.result.choices[0].message.content');
+
+ GO
+
+```
+
+### Task 1.2
+
+Now that you have created the chat completion stored procedure, we need to create a new find_products_chat stored procedure that adds a call to this chat completion endpoint.  
+
+Copy/Paste the below T-SQL Code in a new query window and Run the code:
+
+
+```SQL
+ CREATE or ALTER procedure [SalesLT].[find_products_chat]
+ @text nvarchar(max),
+ @top int = 3,
+ @min_similarity decimal(19,16) = 0.70
+ AS
+ if (@text is null) return;
+ declare @retval int, @qv vector(1536), @products_json nvarchar(max), @answer nvarchar(max);
+exec @retval = SalesLT.create_embeddings @text, @qv output;
+if (@retval != 0) return;
+ 
+ with vector_results as (
+ SELECT 
+         p.Name as product_name,
+         ISNULL(p.Color,'No Color') as product_color,
+         c.Name as category_name,
+         m.Name as model_name,
+         d.Description as product_description,
+         p.ListPrice as list_price,
+         p.weight as product_weight,
+         vector_distance('cosine', @qv, p.embeddings) AS distance
+ FROM
+     [SalesLT].[Product] p,
+     [SalesLT].[ProductCategory] c,
+     [SalesLT].[ProductModel] m,
+     [SalesLT].[vProductAndDescription] d
+ WHERE p.ProductID = d.ProductID
+ AND p.ProductCategoryID = c.ProductCategoryID
+ AND p.ProductModelID = m.ProductModelID
+ AND p.ProductID = d.ProductID
+ AND d.Culture = 'en')
+ SELECT
+ top(@top)
+ @products_json = (STRING_AGG (CONVERT(NVARCHAR(max),CONCAT( 
+                                 product_name, ' ' ,
+                                 product_color, ' ',
+                                 category_name, ' ', 
+                                 model_name, ' ', 
+                                 product_description, ' ',
+                                 list_price, ' ',
+                                 product_weight )), CHAR(13)))
+ FROM vector_results
+ WHERE (1-distance) > @min_similarity
+ GROUP BY  distance
+ ORDER BY    
+     distance asc;
+
+ SET @products_json = (select REPLACE(REPLACE(@products_json, CHAR(13), ' , '), CHAR(10), ' , '));
+
+ exec [SalesLT].[prompt_answer] @text, @products_json, @answer output;
+
+ GO
+
+
+ GO
+
+```
+
+### Task 2.3:
+The last step before we can create a **GraphQL** endpoint is to wrap the new find products chat stored procedure.
+
+ Copy/Paste the below T-SQL Code in a new query window and Run the code:
+
+
+```SQL
+ CREATE or ALTER Procedure SalesLT.[find_products_chat_api]
+        @text nvarchar(max)
+        AS 
+        exec SalesLT.find_products_chat @text
+        with RESULT SETS
+        (    
+            (    
+                answer NVARCHAR(max)
+            )
+        )
+   GO
+
+```
+
+### Task 2.4 
+You can test this new  procedure to see how Azure OpenAI will answer a question with product data.
+    Copy/Paste the below T-SQL Code in a new query window and Run the code:
+   
+```SQL
+    exec SalesLT.find_products_chat_api 'I am looking for a red bike'
+```
+> [!TIP]
+>
+> Above execution will result in this answer: **"It sounds like the Road-650 Red, 62 Red Road Bikes Road-650 would be an excellent choice for you. This value-priced bike comes in red and features a light, stiff frame that is known for its quick acceleration. It also incorporates many features from top-of-the-line models. Would you like more details about this bike or help with anything else?"** . Note: Your answer could be different.
+
+!["A picture of running the find_products_chat_api stored procedure"](../../media/2025-01-17_6.15.05_AM.png)
+    
+
+  
+## Section 2: Create GraphQL API
+
+### Task 2.1:
+To create the GraphQL API, click on the **New API for GraphQL** button on the toolbar just as you did previously.
+   
+!["A picture of clicking on the New API for GraphQL button on the toolbar"](../../media/2025-01-15_6.52.37_AM.png)
+   
+
+In the **New API for GraphQL** dialog box, use the **Name Field** and name the API **find_products_chat_api**.
+After naming the API, click the **green Create button**.
+
+!["A picture of clicking the green Create button in the New API for GraphQL dialog box"](../../media/2025-01-17_7.34.47_AM.png)
+  
+
+In the next dialog box use the **Search box** in the **Explorer section** on the left and enter in **find_products_chat_api**.
+   
+!["A picture of enter in find_products_chat_api in the search box"](../../media/2025-01-17_6.24.33_AM.png)
+   
+
+Choose the stored procedure in the results. You can ensure it is the **find_products_chat_api** stored procedure by hovering over it with your mouse/pointer. It will also indicate the selected database item in the preview section. It should state **"Preview data: SalesLT.find_products_chat_api"**.
+   
+!["A picture of choosing the find_products_chat_api stored procedure in the results"](SearchStoredProcedureNLoad_cht_api.png)
+    
+
+Once you have selected the **find_products_chat_api stored procedure**, click the **green Load button** on the bottom right of the modal dialog box.
+   
+
+You will now be on the **GraphQL Query editor page**. Copy/Paste the below code in the GraphQL query editor.
+
+```SQL
+    query {
+        executefind_products_chat_api(text: "I am looking for padded seats that are good on trails") {
+                answer
+        }
+    }
+```
+
+
+   !["A picture of replacing the sample code on the left side of the GraphQL query editor with the supplied code"](../../media/2025-01-17_6.40.03_AM.png)
+   
+   6.Now, **click the Run button** in the upper left of the GraphQL query editor.
+   
+   !["A picture of clicking the Run button in the upper left of the GraphQL query editor"](../../media/2025-01-17_6.37.51_AM.png)
+     
+
+   7.And you can review the response in the **Results** section of the editor
+      
+   !["A picture of reviewing the response in the Results section of the editor"](../../media/2025-01-17_6.41.24_AM.png)
+    
+
+   8.Copy the following code in the the GraphQL editor and see what answer the chat completion endpoint provides!
+
+   ```SQL
+       query {
+           executefind_products_chat_api(text: "Do you have any racing shorts?") {
+                   answer
+           }
+       }
+   ```
+
+
+
+## What's next
+Congratulations! In this exercise, you gained hands-on experience using the OpenAI GPT-4.1 model and applying RAG patterns within your stored procedures. Additionally, you successfully developed a GraphQL API that will serve as a foundation for the next exercise, where you'll build a chatbot application. In the next module you would [Build a Chatbot Application with VS Code & github](../Module%2006%20-%20Build%20a%20Chatbot%20Application%20With%20VS%20Code%20%26%20github%20copilot/Build%20a%20Chatbot%20Application%20With%20GHCP%20%2B%20VSCode.md).
