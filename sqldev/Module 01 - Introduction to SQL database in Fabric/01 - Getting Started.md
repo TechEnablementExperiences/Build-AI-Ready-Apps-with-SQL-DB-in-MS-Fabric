@@ -8,7 +8,7 @@ Along the way, we’ll review practical considerations for application lifecycle
 
 Our final system architecture will look similar to the following:
 
- ![](../../media/E98.png)
+![](../../media/archisqldb.png)
 
 
 
