@@ -151,6 +151,10 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
 contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
+## Resources
+ 
+- **Workshop Session Deck:** [Build AI-Ready applications with SQL Database in Microsoft Fabric Deck](https://sttechexpcommondata01.blob.core.windows.net/fabconroadshow/Build%20AI-Ready%20applications%20with%20SQL%20Database%20in%20Microsoft%20Fabric.pptx)
+
 ## Legal Notices
 
 ### License
